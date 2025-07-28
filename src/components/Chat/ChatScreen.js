@@ -10,6 +10,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { duotoneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import Image from 'next/image';
 
 // Helper: detect code language and extension
 const getCodeInfo = (codeBlock) => {
@@ -301,7 +302,7 @@ const ImageUpload = ({ onImageSelect, selectedImages, onRemoveImage }) => {
         <div className="flex gap-2">
           {selectedImages.map((img, idx) => (
             <div key={idx} className="relative group">
-              <img
+              <Image
                 src={img.dataUrl}
                 alt={img.name}
                 className="w-10 h-10 rounded-lg object-cover border border-gray-600"
@@ -751,7 +752,7 @@ Generated on: ${new Date().toLocaleString()}
                       Describe the component you want to create!
                     </div>
                     <div className="text-xs text-gray-500 max-w-sm">
-                      Try: "Create a modern button component" or "Build a responsive card with image"
+                      Try: Create a modern button component or Build a responsive card with image
                     </div>
                   </div>
                 ) : (
@@ -830,7 +831,7 @@ Generated on: ${new Date().toLocaleString()}
                     <div className="flex flex-wrap gap-2">
                       {selectedImages.map((img, idx) => (
                         <div key={idx} className="relative group">
-                          <img
+                          <Image
                             src={img.dataUrl}
                             alt={img.name}
                             className="w-16 h-16 rounded-lg object-cover border border-gray-600"
