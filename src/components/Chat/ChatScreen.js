@@ -1,4 +1,3 @@
-
 "use client";
 import React from 'react';
 import { useSession, signOut } from "next-auth/react";
@@ -22,10 +21,6 @@ const getCodeInfo = (codeBlock) => {
   const langMap = {
     'js': 'js', 'javascript': 'js', 'jsx': 'jsx', 'ts': 'ts', 'typescript': 'ts',
     'tsx': 'tsx', 'json': 'json', 'css': 'css', 'html': 'html',
-    'python': 'py', 'py': 'py', 'java': 'java', 'c': 'c',
-    'cpp': 'cpp', 'c++': 'cpp', 'md': 'md', 'markdown': 'md',
-    'php': 'php', 'ruby': 'rb', 'go': 'go', 'rust': 'rs',
-    'sql': 'sql', 'yaml': 'yaml', 'yml': 'yml', 'xml': 'xml'
   };
   ext = langMap[lang] || 'txt';
   return { lang, code, ext };
@@ -66,44 +61,313 @@ const extractCodeBlocks = (content) => {
   return blocks;
 };
 
-// Fixed LivePreviewModal Component
 function LivePreviewModal({ show, codeToRender, onClose }) {
   const iframeRef = useRef(null);
+
+  // Create a complete React runtime environment in the iframe
+  const createReactPreviewHTML = (codeToRender) => {
+    const jsxCode = codeToRender.jsx || '';
+    const cssCode = codeToRender.css || '';
+    
+    // Clean up the JSX code - remove imports and exports, extract component
+    let cleanedCode = jsxCode;
+    
+    // Remove imports
+    cleanedCode = cleanedCode.replace(/import\s+.*?from\s+['"][^'"]*['"];?\s*\n?/g, '');
+    
+    // Remove export default
+    cleanedCode = cleanedCode.replace(/export\s+default\s+/g, '');
+    
+    // Extract component name
+    const componentMatch = cleanedCode.match(/(?:function|const)\s+(\w+)/);
+    const componentName = componentMatch ? componentMatch[1] : 'App';
+    
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>React Component Preview</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {}
+        }
+      }
+    </script>
+    
+    <!-- React and Babel -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Lucide React Icons (if needed) -->
+    <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide-react.js"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #f9fafb;
+            min-height: 100vh;
+        }
+        .preview-container {
+            width: 100%;
+            height: 100%;
+        }
+        .error-display {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px;
+            color: #dc2626;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+        }
+        ${cssCode}
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback, useMemo } = React;
+        const { createRoot } = ReactDOM;
+        
+        // Make Lucide icons available globally if they exist
+        const LucideIcons = window.LucideReact || {};
+        
+        try {
+            // Component code
+            ${cleanedCode}
+            
+            // Render the component
+            const root = createRoot(document.getElementById('root'));
+            
+            // Try to render the component
+            const ComponentToRender = typeof ${componentName} !== 'undefined' ? ${componentName} : (() => 
+                React.createElement('div', { className: 'p-4 text-red-500' }, 'Component not found')
+            );
+            
+            root.render(React.createElement('div', { className: 'preview-container' }, 
+                React.createElement(ComponentToRender)
+            ));
+            
+        } catch (error) {
+            console.error('Preview error:', error);
+            document.getElementById('root').innerHTML = \`
+                <div class="error-display">
+                    <h3 style="margin-top: 0; color: #dc2626;">Preview Error:</h3>
+                    <div>\${error.message}</div>
+                    <details style="margin-top: 12px;">
+                        <summary style="cursor: pointer; color: #7c2d12;">Stack Trace</summary>
+                        <pre style="margin-top: 8px; font-size: 12px;">\${error.stack}</pre>
+                    </details>
+                </div>
+            \`;
+        }
+        
+        // Handle dynamic updates
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'UPDATE_CODE') {
+                try {
+                    // Re-render with new code
+                    location.reload();
+                } catch (error) {
+                    console.error('Update error:', error);
+                }
+            }
+        });
+    </script>
+</body>
+</html>`;
+  };
+
+  // Alternative: Create a simpler HTML preview for basic components
+  const createSimpleHTMLPreview = (codeToRender) => {
+    let jsxCode = codeToRender.jsx || '';
+    const cssCode = codeToRender.css || '';
+    
+    // Extract JSX content more reliably
+    let htmlContent = '';
+    
+    try {
+      // Look for return statement with JSX
+      const returnMatch = jsxCode.match(/return\s*\(\s*([\s\S]*?)\s*\);/);
+      if (returnMatch) {
+        htmlContent = returnMatch[1];
+      } else {
+        // Look for arrow function return
+        const arrowMatch = jsxCode.match(/=>\s*\(\s*([\s\S]*?)\s*\)/);
+        if (arrowMatch) {
+          htmlContent = arrowMatch[1];
+        } else {
+          // Look for direct JSX
+          const jsxMatch = jsxCode.match(/<[\s\S]*>/);
+          if (jsxMatch) {
+            htmlContent = jsxMatch[0];
+          }
+        }
+      }
+      
+      if (htmlContent) {
+        // Transform JSX to HTML
+        htmlContent = htmlContent
+          .replace(/className=/g, 'class=')
+          .replace(/htmlFor=/g, 'for=')
+          .replace(/\s+onClick={[^}]*}/g, '')
+          .replace(/\s+onChange={[^}]*}/g, '')
+          .replace(/\s+onSubmit={[^}]*}/g, '')
+          .replace(/\s+on[A-Z]\w*={[^}]*}/g, '')
+          .replace(/\{([^}]*)\}/g, (match, content) => {
+            // Handle simple string expressions
+            if (content.match(/^['"`].*['"`]$/)) {
+              return content.slice(1, -1);
+            }
+            // Handle simple variables that might be state
+            if (content.match(/^\w+$/)) {
+              return `<!-- ${content} -->`;
+            }
+            return '<!-- dynamic content -->';
+          })
+          .replace(/<(\w+)([^>]*?)\s*\/>/g, '<$1$2></$1>')
+          .replace(/<>/g, '<div>')
+          .replace(/<\/>/g, '</div>');
+      }
+    } catch (error) {
+      console.error('HTML transformation error:', error);
+      htmlContent = '<div class="p-4 text-red-500">Error transforming component</div>';
+    }
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Component Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #f9fafb;
+        }
+        ${cssCode}
+    </style>
+</head>
+<body>
+    <div class="w-full">
+        ${htmlContent || '<div class="p-4 text-gray-500">No content to display</div>'}
+    </div>
+    
+    <script>
+        // Add basic interactivity
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle forms
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const formData = new FormData(this);
+                    console.log('Form data:', Object.fromEntries(formData));
+                    alert('Form submitted! Check console for data.');
+                });
+            });
+            
+            // Handle buttons
+            const buttons = document.querySelectorAll('button[type="button"], button:not([type])');
+            buttons.forEach(button => {
+                button.addEventListener('click', function() {
+                    console.log('Button clicked:', this.textContent);
+                });
+            });
+            
+            // Handle inputs for basic state simulation
+            const inputs = document.querySelectorAll('input, textarea, select');
+            inputs.forEach(input => {
+                input.addEventListener('input', function() {
+                    console.log('Input changed:', this.name || this.id, this.value);
+                });
+            });
+        });
+    </script>
+</body>
+</html>`;
+  };
 
   useEffect(() => {
     if (show && iframeRef.current && codeToRender) {
       const iframe = iframeRef.current;
-
-      const sendMessage = () => {
-        if (iframe.contentWindow) {
-          iframe.contentWindow.postMessage(
-            {
-              type: 'RENDER_CODE',
-              code: {
-                jsx: codeToRender.jsx || '',
-                css: codeToRender.css || '',
-                html: codeToRender.html || '',
-              }
-            },
-            window.location.origin
-          );
-          console.log('Sent code to iframe:', codeToRender);
+      
+      const renderPreview = () => {
+        try {
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+          
+          // Determine which preview method to use
+          const jsxCode = codeToRender.jsx || '';
+          const hasComplexJSX = jsxCode.includes('useState') || 
+                               jsxCode.includes('useEffect') || 
+                               jsxCode.includes('onClick') ||
+                               jsxCode.includes('onChange');
+          
+          let htmlContent;
+          if (hasComplexJSX) {
+            // Use React runtime for complex components
+            htmlContent = createReactPreviewHTML(codeToRender);
+          } else {
+            // Use simple HTML transformation for basic components
+            htmlContent = createSimpleHTMLPreview(codeToRender);
+          }
+          
+          iframeDoc.open();
+          iframeDoc.write(htmlContent);
+          iframeDoc.close();
+          
+          console.log('Preview rendered successfully');
+          
+        } catch (error) {
+          console.error('Failed to render preview:', error);
+          
+          // Fallback error display
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+          iframeDoc.open();
+          iframeDoc.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <script src="https://cdn.tailwindcss.com"></script>
+            </head>
+            <body class="p-4">
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <h3 class="text-red-800 font-semibold mb-2">Preview Error</h3>
+                    <p class="text-red-600 text-sm">${error.message}</p>
+                    <details class="mt-2">
+                        <summary class="text-red-700 cursor-pointer text-xs">Show Details</summary>
+                        <pre class="text-xs mt-2 text-red-500">${error.stack}</pre>
+                    </details>
+                </div>
+            </body>
+            </html>
+          `);
+          iframeDoc.close();
         }
       };
 
-      const onLoad = () => { 
-        setTimeout(sendMessage, 100); // Small delay to ensure iframe is ready
-      };
-      
-      iframe.addEventListener('load', onLoad);
-      
-      // Fallback timer in case load event doesn't fire
-      const fallbackTimer = setTimeout(sendMessage, 500);
-
-      return () => {
-        iframe.removeEventListener('load', onLoad);
-        clearTimeout(fallbackTimer);
-      };
+      // Wait for iframe to be ready
+      if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+        renderPreview();
+      } else {
+        iframe.onload = renderPreview;
+        // Fallback timer
+        setTimeout(renderPreview, 500);
+      }
     }
   }, [show, codeToRender]);
 
@@ -111,10 +375,9 @@ function LivePreviewModal({ show, codeToRender, onClose }) {
     return null;
   }
 
-  // Check if there's actual code to render
   const hasActualCode = codeToRender && (
-    (codeToRender.jsx && codeToRender.jsx.trim() && codeToRender.jsx.trim() !== '// No JSX generated for this prompt.') ||
-    (codeToRender.css && codeToRender.css.trim() && codeToRender.css.trim() !== '/* No CSS generated for this prompt. */') ||
+    (codeToRender.jsx && codeToRender.jsx.trim() && !codeToRender.jsx.includes('No JSX generated')) ||
+    (codeToRender.css && codeToRender.css.trim() && !codeToRender.css.includes('No CSS generated')) ||
     (codeToRender.html && codeToRender.html.trim())
   );
 
@@ -130,7 +393,8 @@ function LivePreviewModal({ show, codeToRender, onClose }) {
           {onClose && (
             <button
               onClick={onClose}
-              className="text-gray-500 hover:text-gray-700 p-1 rounded"
+              className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-100 transition-colors"
+              title="Close Preview"
             >
               ✕
             </button>
@@ -139,21 +403,23 @@ function LivePreviewModal({ show, codeToRender, onClose }) {
       </div>
 
       {/* Preview Area */}
-      <div className="flex-1 bg-gray-100 flex items-center justify-center relative overflow-hidden">
+      <div className="flex-1 bg-gray-50 relative overflow-hidden">
         {hasActualCode ? (
           <iframe
             ref={iframeRef}
             title="Component Live Preview"
-            sandbox="allow-scripts allow-same-origin"
-            className="w-full h-full border-none"
-            src="/preview.html"
-            style={{ minHeight: '200px' }}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
+            className="w-full h-full border-none bg-white"
+            style={{ minHeight: '300px' }}
           />
         ) : (
-          <div className="text-center text-gray-500 p-8">
+          <div className="h-full flex flex-col items-center justify-center text-gray-500 p-8">
             <div className="text-4xl mb-4">🎨</div>
             <p className="text-lg font-medium mb-2">No Component Generated Yet</p>
-            <p className="text-sm">Ask the AI to create a React component to see it here!</p>
+            <p className="text-sm text-center max-w-md">
+              Ask the AI to create a React component to see a live preview here!
+              The preview supports React hooks, Tailwind CSS, and basic interactivity.
+            </p>
           </div>
         )}
       </div>
@@ -305,6 +571,8 @@ const ImageUpload = ({ onImageSelect, selectedImages, onRemoveImage }) => {
               <Image
                 src={img.dataUrl}
                 alt={img.name}
+                width={40}
+                height={40}
                 className="w-10 h-10 rounded-lg object-cover border border-gray-600"
               />
               <button
@@ -331,6 +599,7 @@ export default function ChatScreen({ chatId }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
   const [generatedComponent, setGeneratedComponent] = useState({ jsx: '', css: '', html: '' });
+  const [isNewChat, setIsNewChat] = useState(false);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -338,15 +607,30 @@ export default function ChatScreen({ chatId }) {
   }, [session]);
 
   useEffect(() => {
+    // Clear state when chatId changes to null (new chat)
+    if (!chatId) {
+      setSelectedChat(null);
+      setGeneratedComponent({ jsx: '', css: '', html: '' });
+      setIsNewChat(true);
+      setInput("");
+      setSelectedImages([]);
+      setAiError("");
+      return;
+    }
+
+    // Find and set selected chat when chatId is provided
     if (chatId && chats.length > 0) {
       const found = chats.find((c) => c._id === chatId);
       if (found) {
         setSelectedChat(found);
         extractComponentFromChat(found);
+        setIsNewChat(false);
       }
     } else if (chats.length > 0 && !chatId) {
+      // If no chatId but chats exist, select first chat
       setSelectedChat(chats[0]);
       extractComponentFromChat(chats[0]);
+      setIsNewChat(false);
     }
   }, [chatId, chats]);
 
@@ -398,11 +682,16 @@ export default function ChatScreen({ chatId }) {
   };
 
   const handleNewChat = () => {
-    router.push("/chat");
+    // Clear all state immediately
     setSelectedChat(null);
     setInput("");
     setSelectedImages([]);
     setGeneratedComponent({ jsx: '', css: '', html: '' });
+    setAiError("");
+    setIsNewChat(true);
+    
+    // Navigate to new chat route
+    router.push("/chat");
   };
 
   const handleImageSelect = (imageData) => {
@@ -513,8 +802,8 @@ If prior conversation context is available, use it to **build upon or iterate th
     setAiLoading(true);
     
     try {
-      // Get conversation context
-      const conversationContext = selectedChat?.messages ? getConversationContext(selectedChat.messages) : "";
+      // Get conversation context (only if not a new chat)
+      const conversationContext = selectedChat?.messages && !isNewChat ? getConversationContext(selectedChat.messages) : "";
       
       // Create enhanced prompt with context
       const enhancedPrompt = createEnhancedPrompt(input, selectedImages, conversationContext);
@@ -538,7 +827,7 @@ If prior conversation context is available, use it to **build upon or iterate th
       if (!geminiRes.ok) throw new Error(geminiData.error || "Gemini error");
 
       let aiTitle = undefined;
-      if (!selectedChat) {
+      if (!selectedChat || isNewChat) {
         aiTitle = await getGeminiTitle(input, geminiData.output);
       }
 
@@ -560,6 +849,12 @@ If prior conversation context is available, use it to **build upon or iterate th
         extractComponentFromChat(chatData);
         setInput("");
         setSelectedImages([]);
+        setIsNewChat(false);
+        
+        // Update URL if this was a new chat
+        if (!selectedChat || isNewChat) {
+          router.push(`/chat/${chatData._id}`);
+        }
       } else {
         setAiError(chatData.error || "Failed to save chat");
       }
@@ -738,7 +1033,9 @@ Generated on: ${new Date().toLocaleString()}
             <div className="h-full flex flex-col">
               <div className="bg-gradient-to-r from-orange-500/20 to-orange-600/20 border-b border-orange-500/30 p-3 flex-shrink-0">
                 <h2 className="text-sm font-semibold text-orange-300">Component Generator Chat</h2>
-                
+                {selectedChat && (
+                  <p className="text-xs text-gray-400 mt-1">{selectedChat.title || "Untitled Chat"}</p>
+                )}
               </div>
               
               <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
@@ -834,6 +1131,8 @@ Generated on: ${new Date().toLocaleString()}
                           <Image
                             src={img.dataUrl}
                             alt={img.name}
+                            width={64}
+                            height={64}
                             className="w-16 h-16 rounded-lg object-cover border border-gray-600"
                           />
                           <button
@@ -925,4 +1224,3 @@ Generated on: ${new Date().toLocaleString()}
     </div>
   );
 }
-

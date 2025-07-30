@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 export default function LandingPage() {
     const { data: session, status } = useSession();
-    const [input,   setInput] = useState("");
+    const [input, setInput] = useState("");
     const [history, setHistory] = useState([]);
     const [aiLoading, setAiLoading] = useState(false);
     const [aiError, setAiError] = useState("");
@@ -23,12 +23,74 @@ export default function LandingPage() {
             const res = await fetch("/api/chat");
             if (res.ok) {
                 const data = await res.json();
-                // Show only the last 3 messages (user or bot)
+                // Show only the last 3 chats
                 setHistory(data.slice(-3));
             }
         } catch (err) {
             console.error("Error fetching history:", err);
             // Don't set error state for history fetch failures
+        }
+    };
+
+    const createEnhancedPrompt = (userInput) => {
+        return `
+You are an expert React component generator.
+
+When the user asks you to **"build"**, **"create"**, **"generate"**, or describes a UI element, you must return clean, self-contained component code suitable for direct rendering.
+
+🧠 Expectations:
+- Use **React functional components** with Hooks only (no class components)
+- Output must be clean, modern **TSX/JSX**
+- Style using **Tailwind CSS utility classes** (unless CSS is explicitly requested)
+- Ensure **responsiveness** (mobile-first) and **accessibility** (ARIA-compliant)
+- Add **inline comments** for non-trivial logic and JSX structure
+- Avoid unnecessary complexity; no types/interfaces unless required
+- **Do not include**:
+  - \`import React from "react"\` (assume React is globally available)
+  - \`import './App.css'\` or other CSS imports
+  - Any routing-specific logic such as \`useNavigate\` or \`useRouter\`
+
+📦 Output Format:
+- Provide a brief explanation of the component first (1–3 sentences)
+- Format all code using correct markdown:
+  - JSX/TSX: \`\`\`tsx ... \`\`\`
+  - CSS (if applicable): \`\`\`css ... \`\`\`
+  - HTML (if used): \`\`\`html ... \`\`\`
+
+🛠️ When a prompt is given, generate a clean, modern React functional component:
+\`\`\`tsx
+// TSX/JSX Component Code
+\`\`\`
+
+\`\`\`css
+/* Optional CSS file content (only if needed beyond Tailwind) */
+\`\`\`
+
+Generate a clean, modern React functional component based on the following prompt:
+"${userInput}"
+`;
+    };
+
+    const getGeminiTitle = async (userMsg, aiMsg) => {
+        try {
+            const prompt = `Summarize this chat in a short title (max 8 words):\nUser: ${userMsg}\nAI: ${aiMsg}`;
+            const res = await fetch("/api/gemini", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt }),
+            });
+        
+            const data = await res.json();
+        
+            if (res.ok && data.output) {
+                return data.output.split("\n")[0].replace(/['"`]/g, "").trim();
+            } else {
+                console.error("Failed to get Gemini title:", data?.error || data);
+                return "Untitled Chat";
+            }
+        } catch (error) {
+            console.error("Error getting title:", error);
+            return "Untitled Chat";
         }
     };
 
@@ -38,30 +100,85 @@ export default function LandingPage() {
             setAiError("Please login to send messages");
             return;
         }
+
+        if (!input.trim()) {
+            setAiError("Please enter a message");
+            return;
+        }
         
         setAiError("");
         setAiLoading(true);
+        
         try {
-            const res = await fetch("/api/chat", {
+            // Create enhanced prompt for AI
+            const enhancedPrompt = createEnhancedPrompt(input);
+            
+            // Step 1: Get AI response from Gemini
+            const geminiRes = await fetch("/api/gemini", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ user: session.user.email, content: input }),
+                body: JSON.stringify({ 
+                    prompt: enhancedPrompt,
+                    images: [] // No images from landing page
+                }),
             });
-            setInput("");
-            if (res.ok) {
-                const data = await res.json();
-                if (data && data._id) {
-                    router.push(`/chat/${data._id}`);
-                } else {
-                    await fetchHistory();
-                }
-            } else {
-                setAiError("Failed to send message");
+            
+            const geminiData = await geminiRes.json();
+            if (!geminiRes.ok) {
+                throw new Error(geminiData.error || "Failed to generate AI response");
             }
+
+            // Step 2: Generate a title for the chat
+            const aiTitle = await getGeminiTitle(input, geminiData.output);
+
+            // Step 3: Create chat with both user message and AI response
+            const chatRes = await fetch("/api/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    chatId: null, // New chat
+                    prompt: input,
+                    aiResponse: geminiData.output,
+                    aiTitle: aiTitle,
+                }),
+            });
+            
+            const chatData = await chatRes.json();
+            if (!chatRes.ok) {
+                throw new Error(chatData.error || "Failed to create chat");
+            }
+
+            // Clear input and navigate to the new chat
+            setInput("");
+            
+            if (chatData && chatData._id) {
+                router.push(`/chat/${chatData._id}`);
+            } else {
+                throw new Error("Chat created but no ID returned");
+            }
+            
         } catch (err) {
-            setAiError("Failed to send message");
+            console.error("Error in handleSend:", err);
+            setAiError(err.message || "Failed to send message");
         } finally {
             setAiLoading(false);
+        }
+    };
+
+    const handleQuickAction = (actionText) => {
+        setInput(actionText);
+        // Focus the input field
+        setTimeout(() => {
+            const inputElement = document.querySelector('input[type="text"]');
+            if (inputElement) {
+                inputElement.focus();
+            }
+        }, 100);
+    };
+
+    const handleHistoryClick = (chat) => {
+        if (chat && chat._id) {
+            router.push(`/chat/${chat._id}`);
         }
     };
 
@@ -114,8 +231,12 @@ export default function LandingPage() {
                                     <p className="text-gray-600 text-xs mt-1">Start building to see your component history</p>
                                 </div>
                             ) : (
-                                history.map((msg, idx) => (
-                                    <div key={msg._id || idx} className="bg-gray-800/50 hover:bg-gray-800/70 transition-colors duration-200 rounded-lg p-3 cursor-pointer border border-gray-700/50">
+                                history.map((chat, idx) => (
+                                    <div 
+                                        key={chat._id || idx} 
+                                        className="bg-gray-800/50 hover:bg-gray-800/70 transition-colors duration-200 rounded-lg p-3 cursor-pointer border border-gray-700/50"
+                                        onClick={() => handleHistoryClick(chat)}
+                                    >
                                         <div className="flex items-start gap-3">
                                             <div className="w-6 h-6 bg-gradient-to-r from-green-500 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                                                 <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -123,8 +244,12 @@ export default function LandingPage() {
                                                 </svg>
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-sm text-gray-300 truncate">{msg.content}</p>
-                                                <p className="text-xs text-gray-500 mt-1">Component generated</p>
+                                                <p className="text-sm text-gray-300 truncate font-medium">
+                                                    {chat.title || "Untitled Component"}
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    {chat.messages?.length || 0} messages
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
@@ -162,7 +287,7 @@ export default function LandingPage() {
                                 <div className="relative">
                                     <input
                                         type="text"
-                                        className="w-full bg-gray-800/50 border border-gray-600/50 rounded-xl px-6 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200 text-lg"
+                                        className="w-full bg-gray-800/50 border border-gray-600/50 rounded-xl px-6 py-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all duration-200 text-lg pr-32"
                                         placeholder="Build a modern login form... Create a responsive navbar... Generate a dashboard card..."
                                         value={input}
                                         onChange={e => setInput(e.target.value)}
@@ -178,14 +303,14 @@ export default function LandingPage() {
                                             {aiLoading ? (
                                                 <>
                                                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                    <span>Sending...</span>
+                                                    <span>Building...</span>
                                                 </>
                                             ) : (
                                                 <>
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                                                     </svg>
-                                                    <span>Send</span>
+                                                    <span>Build</span>
                                                 </>
                                             )}
                                         </button>
@@ -205,7 +330,10 @@ export default function LandingPage() {
                             {/* Quick Action Cards */}
                             {session && (
                                 <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="bg-gray-800/30 hover:bg-gray-800/50 border border-gray-700/30 rounded-xl p-4 cursor-pointer transition-all duration-200 group">
+                                    <div 
+                                        className="bg-gray-800/30 hover:bg-gray-800/50 border border-gray-700/30 rounded-xl p-4 cursor-pointer transition-all duration-200 group"
+                                        onClick={() => handleQuickAction("Create a modern login form with email and password fields")}
+                                    >
                                         <div className="flex items-center gap-3 mb-2">
                                             <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
                                                 <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -217,7 +345,10 @@ export default function LandingPage() {
                                         <p className="text-sm text-gray-400">Build forms, buttons, cards, modals, and interactive elements</p>
                                     </div>
 
-                                    <div className="bg-gray-800/30 hover:bg-gray-800/50 border border-gray-700/30 rounded-xl p-4 cursor-pointer transition-all duration-200 group">
+                                    <div 
+                                        className="bg-gray-800/30 hover:bg-gray-800/50 border border-gray-700/30 rounded-xl p-4 cursor-pointer transition-all duration-200 group"
+                                        onClick={() => handleQuickAction("Create a responsive navigation bar with mobile menu")}
+                                    >
                                         <div className="flex items-center gap-3 mb-2">
                                             <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
                                                 <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -229,7 +360,10 @@ export default function LandingPage() {
                                         <p className="text-sm text-gray-400">Mobile-first layouts with Tailwind CSS utility classes</p>
                                     </div>
 
-                                    <div className="bg-gray-800/30 hover:bg-gray-800/50 border border-gray-700/30 rounded-xl p-4 cursor-pointer transition-all duration-200 group">
+                                    <div 
+                                        className="bg-gray-800/30 hover:bg-gray-800/50 border border-gray-700/30 rounded-xl p-4 cursor-pointer transition-all duration-200 group"
+                                        onClick={() => handleQuickAction("Build a dashboard card component with statistics and charts")}
+                                    >
                                         <div className="flex items-center gap-3 mb-2">
                                             <div className="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">
                                                 <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

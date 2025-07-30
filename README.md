@@ -1,36 +1,128 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# 🚀 Component & Multi-Component Generator Platform
 
-## Getting Started
+## 📖 Overview
 
-First, run the development server:
+A stateful, AI-driven micro-frontend playground where authenticated users can iteratively generate, preview, tweak, and export React components with full chat history and code preservation across sessions.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+## 🧰 Tech Stack
+
+- **Frontend**: Next.js 14 with React 18
+- **Authentication**: NextAuth.js with JWT sessions
+- **Database**: MongoDB with Mongoose ODM
+- **AI Integration**: OpenRouter API (gemini)
+- **Styling**: Tailwind CSS
+- **State Management**: React Context + useState/useReducer
+- **Deployment**: Vercel
+- **Code Highlighting**: Prism
+
+## ✨ Features Implemented
+
+### 🔐 Authentication & Persistence ✅
+- **Secure Authentication**: Email/password signup and login using NextAuth.js
+- **Session Management**: JWT-based sessions with secure password hashing
+- **Previous Sessions**: Load and resume any saved work with full chat history
+- **New Session Creation**: Initialize fresh workspace with clean state
+
+### 💬 Conversational UI for Generation ✅
+- **Side-panel Chat**: Text and image input support for AI prompts
+- **AI Integration**: Real-time component generation using OpenRouter API
+- **Live Preview**: Instant rendering of generated components in central viewport
+- **Streaming Responses**: Real-time AI response streaming for better UX
+
+### 📄 Code Inspection & Export ✅
+- **Syntax Highlighting**: Tabbed interface showing JSX/TSX and CSS code
+- **Copy Functionality**: One-click code copying to clipboard
+- **Download Export**: Complete project download as ZIP file
+- **Code Formatting**: Properly formatted and structured code output
+
+### 🔄 Iterative Refinement ✅
+- **Conversational Updates**: Refine components through natural language
+- **Delta Application**: Smart patching of existing components
+- **Version History**: Track changes across iterations
+- **Context Preservation**: AI maintains context of previous generations
+
+### 💾 Statefulness & Resume ✅
+- **Auto-save**: Automatic saving after every chat turn and code change
+- **Session Persistence**: Complete state restoration on login/reload
+- **Full History Recovery**: Chat history, code, and preview state preserved
+- **Graceful Error Recovery**: Robust error handling and state recovery
+
+### 🎨 Chat-Driven Overrides ✅
+- **Targeted Updates**: AI can modify specific elements or properties
+- **Natural Language Edits**: "Make the button red" style commands
+- **Contextual Understanding**: AI maintains component structure while applying changes
+
+## 🏗️ Architecture
+
+### System Architecture
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Next.js App   │    │   NextAuth.js   │    │    MongoDB      │
+│                 │◄──►│                 │◄──►│                 │
+│  - Pages/API    │    │  - JWT Sessions │    │  - User Data    │
+│  - Components   │    │  - Auth Providers│   │  - Chat History │
+│  - State Mgmt   │    │  - Middleware   │    │  - Components   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                                              ▲
+         ▼                                              │
+┌─────────────────┐    ┌─────────────────┐             │
+│  OpenRouter API │    │     Vercel      │             │
+│                 │    │                 │             │
+│  - LLM Models   │    │  - Hosting      │             │
+│  - Completions  │    │  - Edge Runtime │             │
+│  - Streaming    │    │  - Serverless   │─────────────┘
+└─────────────────┘    └─────────────────┘
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## 🔑 Key Technical Decisions
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 1. **Next.js Full-Stack Approach**
+- **Why**: Simplified deployment, API routes, SSR capabilities
+- **Trade-off**: Coupled frontend/backend vs microservices flexibility
 
-## Learn More
+### 2. **NextAuth.js for Authentication**
+- **Why**: Production-ready, secure, extensible
+- **Trade-off**: Opinionated structure vs custom implementation
 
-To learn more about Next.js, take a look at the following resources:
+### 3. **MongoDB for Persistence**
+- **Why**: Flexible schema for evolving chat/component data
+- **Trade-off**: Document queries vs SQL relationships
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 4. **Iframe Sandbox for Component Preview**
+- **Why**: Security isolation, style encapsulation
+- **Trade-off**: Communication complexity vs direct rendering
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 5. **Auto-save without Redis**
+- **Why**: Simplified architecture, fewer dependencies
+- **Trade-off**: Direct DB writes vs caching layer performance
 
-## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🔮 Future Enhancements
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Phase 2 Features
+- [ ] Interactive Property Editor with visual controls
+- [ ] Multi-component project generation
+- [ ] Component library and sharing
+- [ ] Advanced code refactoring tools
+- [ ] Team collaboration features
+- [ ] Plugin system for custom AI models
+
+### Performance Optimizations
+- [ ] Redis caching layer
+- [ ] Component preview optimization
+- [ ] Database query optimization
+- [ ] CDN integration for assets
+
+## 🐛 Known Issues & Limitations
+
+1. **Component Preview**: Complex components with external dependencies may not render
+2. **Mobile Experience**: Optimized for desktop, mobile could be improved
+3. **Large Sessions**: Performance may degrade with very large chat histories
+4. **AI Hallucinations**: Generated code may occasionally have syntax errors
+
+
+---
+
+**Built with ❤️ using Next.js, MongoDB, and AI**
